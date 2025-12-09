@@ -1,204 +1,219 @@
+# Raspberry Pi 5 Security System with Hailo Card and RPi Camera
 
-![Banner](doc/images/hailo_rpi_examples_banner.png)
+A comprehensive security system that uses face recognition to identify authorized persons and automatically captures photos and sends email alerts for unauthorized access. Includes voice features for future expansion.
 
-# Hailo Raspberry Pi 5 Examples
+## Features
 
-Welcome to the Hailo Raspberry Pi 5 Examples repository. This project showcases various examples demonstrating the capabilities of the Hailo AI processor on a Raspberry Pi 5. These examples will help you get started with AI on embedded devices.
-The examples in this repository are designed to work with the Raspberry Pi AI Kit and AI HAT, supporting both the Hailo8 (26 TOPS) and Hailo8L (13 TOPS) AI processors. The examples can also be run on an x86_64 Ubuntu machine with the Hailo8/8L AI processor.
-Visit the [Hailo Official Website](https://hailo.ai/) and [Hailo Community Forum](https://community.hailo.ai/) for more information.
+- ✅ **Face Recognition**: Recognizes authorized faces from a database
+- ✅ **Unauthorized Detection**: Automatically detects and captures photos of unauthorized persons
+- ✅ **Email Alerts**: Sends email notifications with photos when unauthorized access is detected
+- ✅ **Voice Announcements**: Optional text-to-speech announcements (ready for future voice features)
+- ✅ **Easy Face Management**: Command-line tools to add/remove authorized faces
+- ✅ **Hailo AI Support**: Ready for Hailo accelerator card integration
 
-## Install Hailo Hardware and Software Setup on Raspberry Pi
+## Hardware Requirements
 
-For instructions on how to set up Hailo's hardware and software on the Raspberry Pi 5, see the [Hailo Raspberry Pi 5 installation guide](doc/install-raspberry-pi5.md#how-to-set-up-raspberry-pi-5-and-hailo).
+- Raspberry Pi 5
+- Hailo AI accelerator card (Hailo-8L or compatible) - Optional
+- Raspberry Pi Camera Module (v2 or v3)
+- Compatible camera ribbon cable
+- Microphone and speaker (for voice features)
 
+## Software Requirements
 
-# Hailo RPi5 Basic Pipelines
-The basic pipelines examples demonstrate object detection, human pose estimation, and instance segmentation, providing a solid foundation for your own projects.
-This repo is using our new [Hailo Apps Infra](https://github.com/hailo-ai/hailo-apps-infra) repo as a dependency.
-See our Developement Guide for more information on how to use the pipelines to create your own custom pipelines.
+- Raspberry Pi OS (64-bit recommended)
+- Python 3.9+
+- Hailo runtime libraries (optional, for Hailo acceleration)
+- picamera2 library for camera access
 
 ## Installation
 
-### Clone the Repository
-```bash
-git clone https://github.com/hailo-ai/hailo-rpi5-examples.git
-```
-Navigate to the repository directory:
-```bash
-cd hailo-rpi5-examples
-```
-
-### Installation
-Run the following script to automate the installation process:
-```bash
-./install.sh
-```
-
-### Documentation
-For additional information and documentation on how to use the pipelines to create your own custom pipelines, see the [Basic Pipelines Documentation](doc/basic-pipelines.md).
-
-### Running The Examples
-When opening a new terminal session, ensure you have sourced the environment setup script:
-```bash
-source setup_env.sh
-```
-### Detection Example
-
-![Detection Example](doc/images/detection.gif)
-
-#### Run the simple detection example:
-```bash
-python basic_pipelines/detection_simple.py
-```
-To close the application, press `Ctrl+C`.
-
-This is lightweight version of the detection example, mainly focusing on demonstrating Hailo performance while minimizing CPU load. The internal GStreamer video processing pipeline is simplified by minimizing video processing tasks, and the YOLOv6 Nano model is used.
-
-#### Run the full detection example:
-This is the full detection example, including object tracker and multiple video resolution support - see more information [Detection Example Documentation](doc/basic-pipelines.md#detection-example):
+### 1. Install System Dependencies
 
 ```bash
-python basic_pipelines/detection.py
+sudo apt update
+sudo apt install -y python3-pip python3-venv python3-picamera2
+sudo apt install -y cmake build-essential
+sudo apt install -y libopenblas-dev liblapack-dev
 ```
-To close the application, press `Ctrl+C`.
 
-#### Running with Raspberry Pi Camera input:
+### 2. Install Face Recognition Dependencies
+
+The `face_recognition` library requires `dlib`, which needs to be compiled:
+
 ```bash
-python basic_pipelines/detection.py --input rpi
+# Install dlib dependencies
+sudo apt install -y python3-dev python3-setuptools
+pip3 install dlib
+pip3 install face_recognition
 ```
 
-#### Running with USB camera input (webcam):
-There are 2 ways:
+### 3. Create Virtual Environment
 
-Specify the argument `--input` to `usb`:
 ```bash
-python basic_pipelines/detection.py --input usb
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-This will automatically detect the available USB camera (if multiple are connected, it will use the first detected).
+### 4. Install Python Dependencies
 
-Second way:
-
-Detect the available camera using this script:
 ```bash
-get-usb-camera
+pip install -r requirements.txt
 ```
-Run example using USB camera input - Use the device found by the previous script:
+
+### 5. Configure Email Settings
+
+Edit `config.json` and set up your email credentials:
+
+```json
+{
+    "email": {
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "sender_email": "your_email@gmail.com",
+        "sender_password": "your_app_password",
+        "recipient_email": "recipient@gmail.com"
+    }
+}
+```
+
+**For Gmail**: You'll need to use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+
+## Usage
+
+### Setting Up Authorized Faces
+
+#### Option 1: Add faces from image files
+
 ```bash
-python basic_pipelines/detection.py --input /dev/video<X>
+python manage_faces.py add path/to/person_photo.jpg -n "John Doe"
 ```
 
-For additional options, execute:
+#### Option 2: Capture face directly from camera
+
 ```bash
-python basic_pipelines/detection.py --help
+python manage_faces.py capture "John Doe"
 ```
 
-#### Retrained Networks Support
-This application includes support for using retrained detection models. For more information, see [Using Retrained Models](doc/basic-pipelines.md#using-retrained-models).
+This will open the camera and let you capture a face directly.
 
-### Pose Estimation Example
-For more information see [Pose Estimation Example Documentation.](doc/basic-pipelines.md#pose-estimation-example)
-![Pose Estimation Example](doc/images/pose_estimation.gif)
+#### List all authorized faces
 
-#### Run the pose estimation example:
 ```bash
-python basic_pipelines/pose_estimation.py
+python manage_faces.py list
 ```
-To close the application, press `Ctrl+C`.
-See Detection Example above for additional input options examples.
 
-### Instance Segmentation Example
-For more information see [Instance Segmentation Example Documentation.](doc/basic-pipelines.md#instance-segmentation-example)
-![Instance Segmentation Example](doc/images/instance_segmentation.gif)
+#### Remove an authorized face
 
-#### Run the instance segmentation example:
 ```bash
-python basic_pipelines/instance_segmentation.py
+python manage_faces.py remove "John Doe"
 ```
-To close the application, press `Ctrl+C`.
-See Detection Example above for additional input options examples.
 
-### Depth Estimation Example
-For more information see [Depth Estimation Example Documentation.](doc/basic-pipelines.md#depth-estimation-example)
-![Depth Estimation Example](doc/images/depth.gif)
+### Running the Security System
 
-#### Run the depth estimation example:
 ```bash
-python basic_pipelines/depth.py
+python security_system.py
 ```
-To close the application, press `Ctrl+C`.
-See Detection Example above for additional input options examples.
 
-### Community Projects
+The system will:
+- Monitor the camera feed
+- Recognize authorized faces (shown in green)
+- Detect unauthorized persons (shown in red)
+- Capture photos of unauthorized persons
+- Send email alerts with photos
+- Optionally announce via voice (if enabled)
 
-Get involved and make your mark! Explore our Community Projects and start contributing today, because together, we build better things! 🚀
-Check out our [Community Projects](community_projects/community_projects.md) for more information.
+Press `q` to quit or `Ctrl+C` to stop.
 
-# Additional Examples and Resources
+### Configuration
 
-![Hailo Examples Code Structure](doc/images/hailo_examples_code_structure.svg)
+Edit `config.json` to customize:
 
-## Hailo Apps Infra
-Hailo RPi5 Examples are using the [Hailo Apps Infra Repository](https://github.com/hailo-ai/hailo-apps-infra) as a dependency. The Hailo Apps Infra repository contains the infrastructure of Hailo applications and pipelines.
-It is aimed for to provide tools for developers who want to create their own custom pipelines and applications. It features a simple and easy-to-use API for creating custom pipelines and applications.
-It it installed as a pip package and can be used as a dependency in your own projects. See more information in its documentation and Development Guide.
+- `camera_resolution`: Camera resolution [width, height]
+- `faces_directory`: Directory storing authorized face images
+- `unauthorized_directory`: Directory for captured unauthorized photos
+- `face_recognition_tolerance`: Lower = stricter (0.4-0.6 recommended)
+- `detection_cooldown`: Seconds between email alerts (prevents spam)
+- `enable_voice`: Enable/disable voice announcements
+- `email`: Email configuration
 
-### CLIP Application
+## Project Structure
 
-CLIP (Contrastive Language-Image Pre-training) predicts the most relevant text prompt on real-time video frames using Hailo8/8l AI processor.
-See the [hailo-CLIP Repository](https://github.com/hailo-ai/hailo-CLIP) for more information.
-Click the image below to watch the demo on YouTube.
+```
+hailo-rpi5-examples/
+├── security_system.py      # Main security system
+├── manage_faces.py         # Face database management utility
+├── email_sender.py         # Email notification system
+├── voice_features.py       # Voice announcements (future features)
+├── config.py               # Configuration management
+├── config.json             # Configuration file
+├── camera_hailo_example.py # Original Hailo example
+├── requirements.txt        # Python dependencies
+├── authorized_faces/       # Directory for authorized face images (created automatically)
+└── unauthorized_detections/ # Directory for captured unauthorized photos (created automatically)
+```
 
-[![Watch the demo on YouTube](https://img.youtube.com/vi/XXizBHtCLew/0.jpg)](https://youtu.be/XXizBHtCLew)
+## Voice Features (Future Expansion)
 
+The system includes a voice module ready for future features:
 
-#### Frigate Integration - Coming Soon
+- ✅ Text-to-speech announcements
+- 🔄 Voice recognition (to be implemented)
+- 🔄 Interactive responses (to be implemented)
 
-Frigate is an open-source video surveillance software that runs on a Raspberry Pi. This integration will allow you to use the Hailo-8L AI processor for object detection in real-time video streams.
+To enable voice features, set `"enable_voice": true` in `config.json`.
 
+The system will announce:
+- "Who are you?"
+- "What are you doing in my room?"
+- "You are not authorized to be here."
+- "Security alert activated."
 
-### Raspberry Pi Official Examples
+## Troubleshooting
 
-#### rpicam-apps
+### Face Recognition Not Working
 
-Raspberry Pi [rpicam-apps](https://www.raspberrypi.com/documentation/computers/camera_software.html#rpicam-apps) Hailo post-processing examples.
-This is Raspberry Pi's official example for AI post-processing using the Hailo AI processor integrated into their CPP camera framework.
-The documentation on how to use rpicam-apps can be found [here](https://www.raspberrypi.com/documentation/computers/ai.html).
+- Ensure faces are clearly visible in the images
+- Use good lighting
+- Try adjusting `face_recognition_tolerance` in config.json
+- Make sure `dlib` is properly installed
 
-#### picamera2
+### Email Not Sending
 
-Raspberry Pi [picamera2](https://github.com/raspberrypi/picamera2) is the libcamera-based replacement for Picamera, which was a Python interface to the Raspberry Pi's legacy camera stack. Picamera2 also presents an easy-to-use Python API.
+- Check your email credentials in `config.json`
+- For Gmail, use an App Password, not your regular password
+- Check firewall settings for SMTP port 587
+- Verify internet connection
 
-## Additional Resources
+### Camera Not Detected
 
-### Hailo Python API
-The Hailo Python API is now available on the Raspberry Pi 5. This API allows you to run inference on the Hailo-8L AI processor using Python.
-For examples, see our [Python code examples](https://github.com/hailo-ai/Hailo-Application-Code-Examples/tree/main/runtime/python).
-Additional examples can be found in RPi [picamera2](#picamera2) code.
-Visit our [HailoRT Python API documentation](https://hailo.ai/developer-zone/documentation/hailort-v4-18-0/?page=api%2Fpython_api.html#module-hailo_platform.drivers) for more information.
+- Ensure camera is properly connected
+- Check camera ribbon cable
+- Try: `libcamera-hello` to test camera
+- Verify camera is enabled: `sudo raspi-config` → Interface Options → Camera
 
-### Hailo Dataflow Compiler (DFC)
+### Performance Issues
 
-The Hailo Dataflow Compiler (DFC) is a software tool that enables developers to compile their neural networks to run on the Hailo-8/8L AI processors.
-The DFC is available for download from the [Hailo Developer Zone](https://hailo.ai/developer-zone/software-downloads/) (Registration required).
-For examples, tutorials, and retrain instructions, see the [Hailo Model Zoo Repo](https://github.com/hailo-ai/hailo_model_zoo).
-Additional documentation and [tutorials](https://hailo.ai/developer-zone/documentation/dataflow-compiler/latest/?sp_referrer=tutorials/tutorials.html) can be found in the [Hailo Developer Zone Documentation](https://hailo.ai/developer-zone/documentation/).
-For a full end-to-end training and deployment example, see the [Retraining Example](doc/retraining-example.md).
-The detection basic pipeline example includes support for retrained models. For more information, see [Using Retrained Models](doc/basic-pipelines.md#using-retrained-models).
+- Increase `process_every_n_frames` in config.json (processes fewer frames)
+- Lower camera resolution
+- Use Hailo accelerator card for better performance
 
-## Contributing
+## Security Considerations
 
-We welcome contributions from the community. You can contribute by:
-1. Contribute to our [Community Projects](community_projects/community_projects.md).
-2. Reporting issues and bugs.
-3. Suggesting new features or improvements.
-4. Joining the discussion on the [Hailo Community Forum](https://community.hailo.ai/).
-
+- Store authorized face images securely
+- Use strong email passwords/app passwords
+- Consider encrypting stored photos
+- Regularly review unauthorized detection logs
+- Keep system updated
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is provided as-is for educational and personal use.
 
-## Disclaimer
+## Notes
 
-This code example is provided by Hailo solely on an “AS IS” basis and “with all faults.” No responsibility or liability is accepted or shall be imposed upon Hailo regarding the accuracy, merchantability, completeness, or suitability of the code example. Hailo shall not have any liability or responsibility for errors or omissions in, or any business decisions made by you in reliance on this code example or any part of it. If an error occurs when running this example, please open a ticket in the "Issues" tab.
+- The system processes frames every N frames for performance (configurable)
+- Face database is reloaded periodically to pick up new faces
+- Email alerts have a cooldown period to prevent spam
+- Unauthorized photos are saved locally for review
+- Hailo card integration is optional - system works with CPU-based face recognition

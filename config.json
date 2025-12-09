@@ -1,0 +1,19 @@
+{
+    "camera_resolution": [1280, 720],
+    "faces_directory": "authorized_faces",
+    "unauthorized_directory": "unauthorized_detections",
+    "location": "Room",
+    "display": true,
+    "process_every_n_frames": 2,
+    "face_recognition_tolerance": 0.6,
+    "detection_cooldown": 30,
+    "enable_voice": false,
+    "email": {
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "sender_email": "your_email@gmail.com",
+        "sender_password": "your_app_password",
+        "recipient_email": "recipient@gmail.com"
+    }
+}
+

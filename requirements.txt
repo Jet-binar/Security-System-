@@ -1,3 +1,22 @@
-numpy<2.0.0
-setproctitle
-opencv-python
+# Python dependencies for Raspberry Pi 5 Security System with Hailo + Camera
+
+# Camera interface
+picamera2>=0.3.12
+
+# Computer vision
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Face recognition
+face-recognition>=1.3.0
+dlib>=19.24.0
+
+# Email
+# (smtplib is built-in, but you may need additional packages for some email providers)
+
+# Text-to-speech (for voice features)
+pyttsx3>=2.90
+
+# Hailo platform (install separately from Hailo's official package)
+# hailo-platform>=4.15.0
+
