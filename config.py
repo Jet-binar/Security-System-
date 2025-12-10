@@ -31,6 +31,11 @@ def load_config(config_file='config.json'):
         "face_recognition_tolerance": 0.6,
         "detection_cooldown": 30,
         "unauthorized_delay": 5,
+        "motion_detection_enabled": True,
+        "motion_threshold": 5000,
+        "motion_check_interval": 3,
+        "motion_timeout": 5,
+        "scan_interval": 10,
         "email": {
             "smtp_server": "smtp.gmail.com",
             "smtp_port": 587,

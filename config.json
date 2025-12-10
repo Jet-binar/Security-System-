@@ -10,6 +10,11 @@
     "face_recognition_tolerance": 0.6,
     "detection_cooldown": 30,
     "unauthorized_delay": 5,
+    "motion_detection_enabled": true,
+    "motion_threshold": 5000,
+    "motion_check_interval": 3,
+    "motion_timeout": 5,
+    "scan_interval": 10,
     "enable_voice": false,
     "email": {
         "smtp_server": "smtp.gmail.com",
