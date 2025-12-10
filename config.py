@@ -33,9 +33,9 @@ def load_config(config_file='config.json'):
         "unauthorized_delay": 5,
         "motion_detection_enabled": True,
         "motion_threshold": 5000,
-        "motion_check_interval": 3,
-        "motion_timeout": 5,
-        "scan_interval": 10,
+        "motion_check_interval": 5,
+        "scan_interval_motion": 5,
+        "scan_interval_no_motion": 15,
         "email": {
             "smtp_server": "smtp.gmail.com",
             "smtp_port": 587,

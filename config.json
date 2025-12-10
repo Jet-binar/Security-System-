@@ -12,9 +12,9 @@
     "unauthorized_delay": 5,
     "motion_detection_enabled": true,
     "motion_threshold": 5000,
-    "motion_check_interval": 3,
-    "motion_timeout": 5,
-    "scan_interval": 10,
+    "motion_check_interval": 5,
+    "scan_interval_motion": 5,
+    "scan_interval_no_motion": 15,
     "enable_voice": false,
     "email": {
         "smtp_server": "smtp.gmail.com",

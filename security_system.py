@@ -67,19 +67,18 @@ class SecuritySystem:
         self.processing_thread = None
         self.running = False
         
-        # Motion detection for energy saving
+        # Motion detection for adaptive scanning (reduces frequency, never stops)
         self.motion_detection_enabled = self.config.get('motion_detection_enabled', True)
         self.motion_threshold = self.config.get('motion_threshold', 5000)  # Sensitivity threshold
-        self.motion_check_interval = self.config.get('motion_check_interval', 3)  # Check every N frames
+        self.motion_check_interval = self.config.get('motion_check_interval', 5)  # Check every N frames
         self.previous_frame = None
-        self.motion_detected = False
-        self.last_motion_time = 0
-        self.motion_timeout = self.config.get('motion_timeout', 5)  # Stop processing after N seconds of no motion
-        self.scan_interval = self.config.get('scan_interval', 10)  # Scan every N frames when motion detected
+        self.motion_detected = True  # Start with motion detected to begin scanning
+        self.scan_interval_motion = self.config.get('scan_interval_motion', 5)  # Scan every N frames when motion detected
+        self.scan_interval_no_motion = self.config.get('scan_interval_no_motion', 15)  # Scan every N frames when no motion
         
         print(f"Security system initialized with {len(self.known_faces)} authorized faces")
         if self.motion_detection_enabled:
-            print(f"Motion detection: ENABLED (threshold: {self.motion_threshold})")
+            print(f"Motion detection: ENABLED (adaptive scanning)")
     
     def setup_camera(self):
         """Configure and start the Raspberry Pi camera"""
@@ -319,10 +318,12 @@ class SecuritySystem:
     def detect_motion(self, current_frame):
         """Detect motion between frames using frame differencing"""
         if not self.motion_detection_enabled:
+            self.motion_detected = True
             return True  # If motion detection disabled, always return True
         
         if self.previous_frame is None:
             self.previous_frame = current_frame.copy()
+            self.motion_detected = True
             return True  # First frame, assume motion to start processing
         
         # Convert to grayscale for comparison
@@ -343,14 +344,7 @@ class SecuritySystem:
         
         # Check if motion exceeds threshold
         motion_detected = motion_pixels > self.motion_threshold
-        
-        if motion_detected:
-            self.last_motion_time = time.time()
-            self.motion_detected = True
-        else:
-            # Check if motion timeout has passed
-            if time.time() - self.last_motion_time > self.motion_timeout:
-                self.motion_detected = False
+        self.motion_detected = motion_detected
         
         return motion_detected
     
@@ -402,21 +396,22 @@ class SecuritySystem:
                 except:
                     continue
                 
-                # Check for motion (lightweight check every frame)
-                should_process = True
+                # Check for motion periodically (lightweight check)
                 if self.motion_detection_enabled:
-                    # Check motion every N frames to save CPU
                     motion_check_counter += 1
                     if motion_check_counter >= self.motion_check_interval:
-                        should_process = self.detect_motion(original_frame)
+                        self.detect_motion(original_frame)
                         motion_check_counter = 0
-                    else:
-                        # Use last motion state if not checking this frame
-                        should_process = self.motion_detected
                 
-                # Only process face recognition if motion detected (or motion detection disabled)
-                # And only scan every N frames to reduce load
-                if should_process and frame_count % self.scan_interval == 0:
+                # Always process, but adjust frequency based on motion
+                # Scan more frequently when motion detected, less when no motion
+                if self.motion_detection_enabled:
+                    scan_interval = self.scan_interval_motion if self.motion_detected else self.scan_interval_no_motion
+                else:
+                    scan_interval = self.scan_interval_motion  # Use motion interval if detection disabled
+                
+                # Process face recognition at adaptive interval
+                if frame_count % scan_interval == 0:
                     recognized, unrecognized = self.recognize_face(original_frame)
                     
                     # Update face tracking (handles 5-second delay and authorization checking)
@@ -436,11 +431,6 @@ class SecuritySystem:
                         for name, _, _ in recognized:
                             if name != "Unknown":
                                 self.voice_system.speak_authorized(name)
-                elif not should_process:
-                    # No motion - clear results to show standby state
-                    with self.results_lock:
-                        self.latest_results['recognized'] = []
-                        self.latest_results['unrecognized'] = []
                 
             except Exception as e:
                 print(f"Error in processing thread: {e}")
@@ -568,10 +558,10 @@ class SecuritySystem:
                 # Show motion detection status
                 if self.motion_detection_enabled:
                     if self.motion_detected:
-                        motion_status = "MOTION DETECTED - SCANNING"
+                        motion_status = "MOTION - Fast Scan"
                         motion_color = (0, 255, 0)  # Green
                     else:
-                        motion_status = "STANDBY - No Motion"
+                        motion_status = "No Motion - Slow Scan"
                         motion_color = (0, 165, 255)  # Orange
                     cv2.putText(display_frame, motion_status, (10, 60),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, motion_color, 2)
