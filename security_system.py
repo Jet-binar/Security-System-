@@ -117,33 +117,42 @@ class SecuritySystem:
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # Find face locations and encodings
-        face_locations = face_recognition.face_locations(rgb_frame)
+        # Use faster model for better performance
+        face_locations = face_recognition.face_locations(rgb_frame, model="hog")  # "hog" is faster than "cnn"
         face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
         
         recognized = []
         unrecognized = []
         
+        # If no faces found, return empty lists
+        if not face_locations:
+            return recognized, unrecognized
+        
         for face_encoding, face_location in zip(face_encodings, face_locations):
             # Compare with known faces
-            matches = face_recognition.compare_faces(
-                self.known_faces, 
-                face_encoding,
-                tolerance=self.config.get('face_recognition_tolerance', 0.6)
-            )
-            face_distance = face_recognition.face_distance(self.known_faces, face_encoding)
-            
-            name = "Unknown"
-            best_match_index = None
-            
-            if len(face_distance) > 0:
-                best_match_index = np.argmin(face_distance)
-                if matches[best_match_index]:
-                    name = self.known_names[best_match_index]
-            
-            if name == "Unknown":
-                unrecognized.append(face_location)
+            if len(self.known_faces) > 0:
+                matches = face_recognition.compare_faces(
+                    self.known_faces, 
+                    face_encoding,
+                    tolerance=self.config.get('face_recognition_tolerance', 0.6)
+                )
+                face_distance = face_recognition.face_distance(self.known_faces, face_encoding)
+                
+                name = "Unknown"
+                best_match_index = None
+                
+                if len(face_distance) > 0:
+                    best_match_index = np.argmin(face_distance)
+                    if matches[best_match_index]:
+                        name = self.known_names[best_match_index]
+                
+                if name == "Unknown":
+                    unrecognized.append(face_location)
+                else:
+                    recognized.append((name, face_location))
             else:
-                recognized.append((name, face_location))
+                # No authorized faces loaded, treat all as unauthorized
+                unrecognized.append(face_location)
         
         return recognized, unrecognized
     
@@ -211,7 +220,15 @@ class SecuritySystem:
         print("Press Ctrl+C to stop\n")
         
         frame_count = 0
-        process_every_n_frames = self.config.get('process_every_n_frames', 2)  # Process every Nth frame for performance
+        start_time = time.time()
+        process_every_n_frames = self.config.get('process_every_n_frames', 5)  # Process every Nth frame for performance
+        
+        # Get display size for resizing
+        display_size = tuple(self.config.get('display_size', [640, 480]))
+        
+        # Track last detection state
+        last_recognized_count = 0
+        last_unrecognized_count = 0
         
         try:
             while True:
@@ -219,18 +236,48 @@ class SecuritySystem:
                 frame = self.camera.capture_array()
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # Convert to BGR for OpenCV
                 
+                # Resize frame for display (smaller = faster)
+                display_frame = cv2.resize(frame, display_size) if display_size != tuple(frame.shape[:2][::-1]) else frame
+                
                 # Process faces every N frames (for performance)
                 if frame_count % process_every_n_frames == 0:
                     recognized, unrecognized = self.recognize_face(frame)
                     
                     # Draw recognized faces (green)
                     for name, location in recognized:
-                        self.draw_face_box(frame, location, name, (0, 255, 0))
+                        # Scale location if frame was resized
+                        if display_frame.shape != frame.shape:
+                            scale_x = display_size[0] / frame.shape[1]
+                            scale_y = display_size[1] / frame.shape[0]
+                            top, right, bottom, left = location
+                            location_scaled = (
+                                int(top * scale_y), int(right * scale_x),
+                                int(bottom * scale_y), int(left * scale_x)
+                            )
+                            self.draw_face_box(display_frame, location_scaled, name, (0, 255, 0))
+                        else:
+                            self.draw_face_box(display_frame, location, name, (0, 255, 0))
                     
                     # Handle unrecognized faces (red)
                     for location in unrecognized:
-                        self.draw_face_box(frame, location, "UNAUTHORIZED", (0, 0, 255))
-                        self.handle_unauthorized_person(frame, location)
+                        # Scale location if frame was resized
+                        if display_frame.shape != frame.shape:
+                            scale_x = display_size[0] / frame.shape[1]
+                            scale_y = display_size[1] / frame.shape[0]
+                            top, right, bottom, left = location
+                            location_scaled = (
+                                int(top * scale_y), int(right * scale_x),
+                                int(bottom * scale_y), int(left * scale_x)
+                            )
+                            self.draw_face_box(display_frame, location_scaled, "UNAUTHORIZED", (0, 0, 255))
+                            self.handle_unauthorized_person(frame, location)  # Use original frame for saving
+                        else:
+                            self.draw_face_box(display_frame, location, "UNAUTHORIZED", (0, 0, 255))
+                            self.handle_unauthorized_person(frame, location)
+                    
+                    # Track detection state
+                    last_recognized_count = len(recognized)
+                    last_unrecognized_count = len(unrecognized)
                     
                     # Voice announcements for authorized persons
                     if self.voice_system and recognized:
@@ -239,13 +286,18 @@ class SecuritySystem:
                                 self.voice_system.speak_authorized(name)
                 
                 # Add status text
-                status_text = f"Authorized: {len(self.known_faces)} | Frame: {frame_count}"
-                cv2.putText(frame, status_text, (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                status_text = f"Authorized: {len(self.known_faces)} | Frame: {frame_count} | FPS: {frame_count // max(1, (time.time() - start_time)):.1f}"
+                cv2.putText(display_frame, status_text, (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
+                # Show detection status
+                if last_unrecognized_count > 0:
+                    cv2.putText(display_frame, "UNAUTHORIZED DETECTED!", (10, 60),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
                 # Display frame
                 if self.config.get('display', True):
-                    cv2.imshow("Security System", frame)
+                    cv2.imshow("Security System", display_frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 

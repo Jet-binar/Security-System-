@@ -1,10 +1,11 @@
 {
-    "camera_resolution": [1280, 720],
+    "camera_resolution": [640, 480],
     "faces_directory": "authorized_faces",
     "unauthorized_directory": "unauthorized_detections",
     "location": "Room",
     "display": true,
-    "process_every_n_frames": 2,
+    "display_size": [640, 480],
+    "process_every_n_frames": 5,
     "face_recognition_tolerance": 0.6,
     "detection_cooldown": 30,
     "enable_voice": false,
