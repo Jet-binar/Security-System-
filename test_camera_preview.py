@@ -14,10 +14,9 @@ print("Press 'q' to quit")
 # Initialize camera
 camera = Picamera2()
 
-# Configure camera
+# Configure camera (format parameter not needed for preview)
 camera_config = camera.create_preview_configuration(
-    main={"size": (1280, 720)},
-    format="RGB888"
+    main={"size": (1280, 720)}
 )
 camera.configure(camera_config)
 camera.start()

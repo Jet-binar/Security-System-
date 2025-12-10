@@ -61,8 +61,7 @@ class SecuritySystem:
         self.camera = Picamera2()
         
         camera_config = self.camera.create_preview_configuration(
-            main={"size": tuple(self.config['camera_resolution'])},
-            format="RGB888"
+            main={"size": tuple(self.config['camera_resolution'])}
         )
         self.camera.configure(camera_config)
         self.camera.start()
