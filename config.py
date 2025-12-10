@@ -22,7 +22,7 @@ def load_config(config_file='config.json'):
     # Default configuration
     default_config = {
         "camera_resolution": [1280, 720],
-        "camera_fps": 30,
+        "camera_fps": 9,
         "faces_directory": "authorized_faces",
         "unauthorized_directory": "unauthorized_detections",
         "location": "Room",

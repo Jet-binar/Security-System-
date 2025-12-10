@@ -50,18 +50,18 @@ class HailoCameraProcessor:
         """Configure and start the Raspberry Pi camera"""
         print("Setting up camera...")
         
-        # Configure camera with higher FPS (30 FPS for faster checking)
+        # Configure camera
         camera_config = self.camera.create_preview_configuration(
             main={"size": self.camera_resolution},
             format="RGB888",
-            controls={"FrameRate": 30}
+            controls={"FrameRate": 9}
         )
         self.camera.configure(camera_config)
         self.camera.start()
         
         # Allow camera to stabilize
         time.sleep(2)
-        print(f"Camera initialized at {self.camera_resolution} @ 30 FPS")
+        print(f"Camera initialized at {self.camera_resolution} @ 9 FPS")
     
     def setup_hailo(self):
         """Initialize Hailo device and load model"""

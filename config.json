@@ -1,6 +1,6 @@
 {
     "camera_resolution": [640, 480],
-    "camera_fps": 30,
+    "camera_fps": 9,
     "faces_directory": "authorized_faces",
     "unauthorized_directory": "unauthorized_detections",
     "location": "Room",

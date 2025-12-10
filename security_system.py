@@ -74,15 +74,13 @@ class SecuritySystem:
         print("Setting up camera...")
         self.camera = Picamera2()
         
-        # Get FPS setting from config (default to 30 for higher frame rate)
-        target_fps = self.config.get('camera_fps', 30)
+        # Get FPS setting from config (default to 9)
+        target_fps = self.config.get('camera_fps', 9)
         
-        # Optimize camera config for smooth streaming
+        # Configure camera
         camera_config = self.camera.create_preview_configuration(
             main={"size": tuple(self.config['camera_resolution'])},
-            controls={
-                "FrameRate": target_fps,
-            }
+            controls={"FrameRate": target_fps}
         )
         self.camera.configure(camera_config)
         self.camera.start()

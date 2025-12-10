@@ -136,7 +136,7 @@ pip install --force-reinstall face-recognition opencv-python picamera2
 - Increase `"process_every_n_frames": 5` (processes every 5th frame)
 
 ### Want faster checking/more frequent detection?
-- Increase `"camera_fps": 30` (default is 30, can go up to 60 for some cameras)
+- Increase `"camera_fps": 9` (default is 9, can go up to 30-60 for some cameras)
 - Decrease `"process_every_n_frames": 2` (lower number = checks more frames, default is now 2)
 - Note: Lower `process_every_n_frames` values will use more CPU but check more often
 
