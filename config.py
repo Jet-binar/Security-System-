@@ -22,6 +22,7 @@ def load_config(config_file='config.json'):
     # Default configuration
     default_config = {
         "camera_resolution": [1280, 720],
+        "camera_fps": 30,
         "faces_directory": "authorized_faces",
         "unauthorized_directory": "unauthorized_detections",
         "location": "Room",
@@ -29,6 +30,7 @@ def load_config(config_file='config.json'):
         "process_every_n_frames": 2,
         "face_recognition_tolerance": 0.6,
         "detection_cooldown": 30,
+        "unauthorized_delay": 5,
         "email": {
             "smtp_server": "smtp.gmail.com",
             "smtp_port": 587,

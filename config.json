@@ -1,13 +1,15 @@
 {
     "camera_resolution": [640, 480],
+    "camera_fps": 30,
     "faces_directory": "authorized_faces",
     "unauthorized_directory": "unauthorized_detections",
     "location": "Room",
     "display": true,
     "display_size": [640, 480],
-    "process_every_n_frames": 5,
+    "process_every_n_frames": 2,
     "face_recognition_tolerance": 0.6,
     "detection_cooldown": 30,
+    "unauthorized_delay": 5,
     "enable_voice": false,
     "email": {
         "smtp_server": "smtp.gmail.com",
