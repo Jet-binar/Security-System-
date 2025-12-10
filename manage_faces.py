@@ -125,8 +125,7 @@ def capture_face_from_camera(name):
     
     camera = Picamera2()
     camera_config = camera.create_preview_configuration(
-        main={"size": (1280, 720)},
-        format="RGB888"
+        main={"size": (1280, 720)}
     )
     camera.configure(camera_config)
     camera.start()
