@@ -60,6 +60,12 @@ class SecuritySystem:
         self.face_tracking_lock = threading.Lock()
         self.unauthorized_delay = self.config.get('unauthorized_delay', 5)  # seconds to wait before alert
         
+        # Track previously detected unauthorized persons (for repeat offenders)
+        self.previously_unauthorized = []  # List of face encodings that were previously unauthorized
+        self.previously_unauthorized_lock = threading.Lock()
+        self.repeat_offender_delay = self.config.get('repeat_offender_delay', 1)  # Shorter delay for repeat offenders
+        self.unauthorized_memory_time = self.config.get('unauthorized_memory_time', 3600)  # Remember for 1 hour (3600 seconds)
+        
         # Threading for smooth camera feed
         self.frame_queue = Queue(maxsize=2)  # Keep only latest frames
         self.latest_results = {'recognized': [], 'unrecognized': []}
@@ -279,14 +285,39 @@ class SecuritySystem:
             for face_id, face_data in self.face_tracking.items():
                 elapsed = current_time - face_data['first_seen']
                 
-                # If 5 seconds have passed and face was never authorized
-                if elapsed >= self.unauthorized_delay and not face_data['ever_authorized']:
+                # Check if this is a repeat offender (previously detected unauthorized)
+                is_repeat_offender = False
+                if 'encoding' in face_data:
+                    with self.previously_unauthorized_lock:
+                        for prev_encoding, prev_time in self.previously_unauthorized:
+                            # Check if face matches and memory hasn't expired
+                            if current_time - prev_time < self.unauthorized_memory_time:
+                                try:
+                                    distance = face_recognition.face_distance([prev_encoding], face_data['encoding'])[0]
+                                    if distance < 0.5:  # Same person
+                                        is_repeat_offender = True
+                                        break
+                                except:
+                                    pass
+                
+                # Determine delay: shorter for repeat offenders
+                required_delay = self.repeat_offender_delay if is_repeat_offender else self.unauthorized_delay
+                
+                # If delay has passed and face was never authorized
+                if elapsed >= required_delay and not face_data['ever_authorized']:
                     # Check cooldown to avoid spamming
                     last_alert = self.last_detection_time.get('unauthorized', 0)
                     if current_time - last_alert >= self.detection_cooldown:
                         # Send alert
-                        self.send_unauthorized_alert(face_data['frame'], face_data['location'], face_id)
+                        alert_type = "REPEAT OFFENDER" if is_repeat_offender else "UNAUTHORIZED"
+                        self.send_unauthorized_alert(face_data['frame'], face_data['location'], face_id, alert_type)
                         self.last_detection_time['unauthorized'] = current_time
+                        
+                        # Add to previously unauthorized list if not already there
+                        if 'encoding' in face_data and not is_repeat_offender:
+                            with self.previously_unauthorized_lock:
+                                self.previously_unauthorized.append((face_data['encoding'].copy(), current_time))
+                        
                         faces_to_remove.append(face_id)
                 # If face was authorized, we can remove it from tracking after a delay
                 elif face_data['ever_authorized'] and elapsed > 10:
@@ -309,6 +340,13 @@ class SecuritySystem:
             for face_id in faces_to_remove_old:
                 if face_id in self.face_tracking:
                     del self.face_tracking[face_id]
+            
+            # Clean up old entries from previously_unauthorized list (older than memory time)
+            with self.previously_unauthorized_lock:
+                self.previously_unauthorized = [
+                    (encoding, prev_time) for encoding, prev_time in self.previously_unauthorized
+                    if current_time - prev_time < self.unauthorized_memory_time
+                ]
     
     def draw_face_box(self, frame, location, name, color=(0, 255, 0)):
         """Draw a box around a face with the name"""
@@ -357,9 +395,9 @@ class SecuritySystem:
         
         return motion_detected
     
-    def send_unauthorized_alert(self, frame, face_location, face_id):
-        """Send alert for unauthorized person after 5-second delay"""
-        print(f"⚠️  UNAUTHORIZED PERSON DETECTED! (Face ID: {face_id})")
+    def send_unauthorized_alert(self, frame, face_location, face_id, alert_type="UNAUTHORIZED"):
+        """Send alert for unauthorized person after delay"""
+        print(f"⚠️  {alert_type} PERSON DETECTED! (Face ID: {face_id})")
         
         # Voice announcement
         if self.voice_system:
@@ -376,7 +414,7 @@ class SecuritySystem:
         frame_copy = frame.copy()
         top, right, bottom, left = face_location
         cv2.rectangle(frame_copy, (left, top), (right, bottom), (0, 0, 255), 3)
-        cv2.putText(frame_copy, "UNAUTHORIZED", (left, top - 10),
+        cv2.putText(frame_copy, alert_type, (left, top - 10),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
         cv2.imwrite(str(filepath), frame_copy)
@@ -507,10 +545,27 @@ class SecuritySystem:
                     for face_id, face_data in self.face_tracking.items():
                         if not face_data['ever_authorized']:
                             elapsed = current_time - face_data['first_seen']
-                            remaining = max(0, self.unauthorized_delay - elapsed)
+                            
+                            # Check if repeat offender
+                            is_repeat = False
+                            if 'encoding' in face_data:
+                                with self.previously_unauthorized_lock:
+                                    for prev_encoding, prev_time in self.previously_unauthorized:
+                                        if current_time - prev_time < self.unauthorized_memory_time:
+                                            try:
+                                                distance = face_recognition.face_distance([prev_encoding], face_data['encoding'])[0]
+                                                if distance < 0.5:
+                                                    is_repeat = True
+                                                    break
+                                            except:
+                                                pass
+                            
+                            required_delay = self.repeat_offender_delay if is_repeat else self.unauthorized_delay
+                            remaining = max(0, required_delay - elapsed)
                             tracking_info[face_id] = {
                                 'remaining': remaining,
-                                'location': face_data['location']
+                                'location': face_data['location'],
+                                'is_repeat': is_repeat
                             }
                 
                 # Draw recognized faces (green)
@@ -558,8 +613,10 @@ class SecuritySystem:
                         # If locations are close (within 50 pixels), show countdown
                         if abs(center_x - track_center_x) < 50 and abs(center_y - track_center_y) < 50:
                             remaining = info['remaining']
+                            is_repeat = info.get('is_repeat', False)
+                            prefix = "REPEAT OFFENDER" if is_repeat else "UNAUTHORIZED"
                             if remaining > 0:
-                                countdown_text = f"UNAUTHORIZED ({remaining:.1f}s)"
+                                countdown_text = f"{prefix} ({remaining:.1f}s)"
                             else:
                                 countdown_text = "ALERT SENT!"
                             break

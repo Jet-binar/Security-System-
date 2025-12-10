@@ -10,6 +10,8 @@
     "face_recognition_tolerance": 0.6,
     "detection_cooldown": 30,
     "unauthorized_delay": 5,
+    "repeat_offender_delay": 1,
+    "unauthorized_memory_time": 3600,
     "motion_detection_enabled": true,
     "motion_threshold": 5000,
     "motion_check_interval": 10,
