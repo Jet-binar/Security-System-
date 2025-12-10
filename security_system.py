@@ -70,11 +70,13 @@ class SecuritySystem:
         # Motion detection for adaptive scanning (reduces frequency, never stops)
         self.motion_detection_enabled = self.config.get('motion_detection_enabled', True)
         self.motion_threshold = self.config.get('motion_threshold', 5000)  # Sensitivity threshold
-        self.motion_check_interval = self.config.get('motion_check_interval', 5)  # Check every N frames
+        self.motion_check_interval = self.config.get('motion_check_interval', 10)  # Check every N frames
         self.previous_frame = None
         self.motion_detected = True  # Start with motion detected to begin scanning
-        self.scan_interval_motion = self.config.get('scan_interval_motion', 5)  # Scan every N frames when motion detected
-        self.scan_interval_no_motion = self.config.get('scan_interval_no_motion', 15)  # Scan every N frames when no motion
+        self.scan_interval_motion = self.config.get('scan_interval_motion', 20)  # Scan every N frames when motion detected
+        self.scan_interval_no_motion = self.config.get('scan_interval_no_motion', 40)  # Scan every N frames when no motion
+        self.min_processing_interval = self.config.get('min_processing_interval', 0.5)  # Minimum seconds between processing
+        self.last_processing_time = 0
         
         print(f"Security system initialized with {len(self.known_faces)} authorized faces")
         if self.motion_detection_enabled:
@@ -137,19 +139,26 @@ class SecuritySystem:
     
     def recognize_face(self, frame):
         """
-        Recognize faces in the frame
+        Recognize faces in the frame (optimized for performance)
         
         Returns:
             list of tuples: [(name, location, encoding), ...] for recognized faces
             list of tuples: [(location, encoding), ...] for unrecognized faces
         """
-        # Convert BGR to RGB (face_recognition uses RGB)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Resize frame to smaller size for faster processing (maintains aspect ratio)
+        # Process at 320x240 for much faster face recognition
+        small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
         
-        # Find face locations and encodings
+        # Convert BGR to RGB (face_recognition uses RGB)
+        rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        
+        # Find face locations and encodings on smaller frame
         # Use faster model for better performance
         face_locations = face_recognition.face_locations(rgb_frame, model="hog")  # "hog" is faster than "cnn"
         face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+        
+        # Scale face locations back to original frame size
+        face_locations = [(top*2, right*2, bottom*2, left*2) for (top, right, bottom, left) in face_locations]
         
         recognized = []
         unrecognized = []
@@ -410,8 +419,13 @@ class SecuritySystem:
                 else:
                     scan_interval = self.scan_interval_motion  # Use motion interval if detection disabled
                 
-                # Process face recognition at adaptive interval
-                if frame_count % scan_interval == 0:
+                # Time-based throttling to prevent overload
+                current_time = time.time()
+                time_since_last_process = current_time - self.last_processing_time
+                
+                # Process face recognition at adaptive interval AND minimum time interval
+                if frame_count % scan_interval == 0 and time_since_last_process >= self.min_processing_interval:
+                    self.last_processing_time = current_time
                     recognized, unrecognized = self.recognize_face(original_frame)
                     
                     # Update face tracking (handles 5-second delay and authorization checking)
@@ -467,15 +481,19 @@ class SecuritySystem:
                 display_frame = cv2.resize(frame_bgr, display_size) if display_size != tuple(frame_bgr.shape[:2][::-1]) else frame_bgr.copy()
                 
                 # Add frame to processing queue (non-blocking, drops old frames if queue full)
+                # Only add if queue has space to prevent backup
                 if not self.frame_queue.full():
-                    self.frame_queue.put((display_frame.copy(), frame_bgr.copy()))
+                    try:
+                        self.frame_queue.put_nowait((display_frame.copy(), frame_bgr.copy()))
+                    except:
+                        pass  # Queue full, skip this frame
                 else:
-                    # Queue full, remove oldest and add new
+                    # Queue full, remove oldest and add new (don't block)
                     try:
                         self.frame_queue.get_nowait()
-                        self.frame_queue.put((display_frame.copy(), frame_bgr.copy()))
+                        self.frame_queue.put_nowait((display_frame.copy(), frame_bgr.copy()))
                     except:
-                        pass
+                        pass  # Skip if can't add
                 
                 # Get latest recognition results (thread-safe)
                 with self.results_lock:
