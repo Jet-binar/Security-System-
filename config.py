@@ -21,7 +21,8 @@ def load_config(config_file='config.json'):
     
     # Default configuration
     default_config = {
-        "camera_type": "pi_camera",
+        "camera_type": "auto",
+        "camera_preference": "usb_webcam",
         "camera_resolution": [1280, 720],
         "camera_fps": 9,
         "usb_camera_index": 0,

@@ -36,6 +36,9 @@ class SecuritySystem:
         self.camera = None
         self.camera_type = None  # 'pi_camera' or 'usb_webcam'
         self.usb_camera = None  # OpenCV VideoCapture for USB webcam
+        self.use_both_cameras = self.config.get('use_both_cameras', False)  # Use both if available
+        self.secondary_camera = None  # Secondary camera if using both
+        self.secondary_camera_type = None
         self.known_faces = []
         self.known_names = []
         self.email_sender = EmailSender(self.config)
@@ -91,16 +94,73 @@ class SecuritySystem:
             print(f"Motion detection: ENABLED (adaptive scanning)")
     
     def setup_camera(self):
-        """Configure and start camera (Pi Camera or USB Webcam)"""
-        camera_type = self.config.get('camera_type', 'pi_camera')  # 'pi_camera' or 'usb_webcam'
-        self.camera_type = camera_type
+        """Configure and start camera (auto-detect or use specified type)"""
+        camera_type = self.config.get('camera_type', 'auto')  # 'auto', 'pi_camera', or 'usb_webcam'
         
-        print(f"Setting up camera ({camera_type})...")
-        
-        if camera_type == 'usb_webcam':
+        if camera_type == 'auto':
+            # Auto-detect: try both cameras and use what's available
+            print("Auto-detecting available camera...")
+            self.setup_camera_auto()
+        elif camera_type == 'usb_webcam':
             self.setup_usb_webcam()
         else:
             self.setup_pi_camera()
+    
+    def setup_camera_auto(self):
+        """Automatically detect and use available camera(s)"""
+        # Try USB webcam first (more common for external setups)
+        usb_available = False
+        pi_available = False
+        
+        # Check USB webcam
+        print("  Checking USB webcam...")
+        try:
+            camera_index = self.config.get('usb_camera_index', 0)
+            test_cap = cv2.VideoCapture(camera_index)
+            if test_cap.isOpened():
+                ret, test_frame = test_cap.read()
+                if ret and test_frame is not None:
+                    usb_available = True
+                    print(f"    ✓ USB webcam detected at index {camera_index}")
+                test_cap.release()
+        except:
+            pass
+        
+        # Check Pi Camera
+        print("  Checking Raspberry Pi Camera...")
+        try:
+            test_camera = Picamera2()
+            # Just check if we can create it, don't fully configure
+            pi_available = True
+            print("    ✓ Raspberry Pi Camera detected")
+            del test_camera
+        except:
+            pass
+        
+        # Decide which to use
+        if usb_available and pi_available:
+            # Both available - use preference
+            preference = self.config.get('camera_preference', 'usb_webcam')  # 'usb_webcam' or 'pi_camera'
+            if preference == 'pi_camera':
+                print("  ✓ Both cameras available - using Pi Camera (preference)")
+                self.setup_pi_camera()
+            else:
+                print("  ✓ Both cameras available - using USB webcam (preference)")
+                self.setup_usb_webcam()
+            print("  Note: To use the other camera, change 'camera_preference' in config.json")
+        elif usb_available:
+            print("  ✓ Using USB webcam (only available camera)")
+            self.setup_usb_webcam()
+        elif pi_available:
+            print("  ✓ Using Raspberry Pi Camera (only available camera)")
+            self.setup_pi_camera()
+        else:
+            print("  ❌ No cameras detected!")
+            print("\nTroubleshooting:")
+            print("  - Check USB camera is connected: lsusb")
+            print("  - Check Pi Camera is enabled: sudo raspi-config")
+            print("  - Try: python3 test_usb_camera.py")
+            raise Exception("No cameras available. Please connect a camera and try again.")
     
     def setup_pi_camera(self):
         """Setup Raspberry Pi Camera Module"""

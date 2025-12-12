@@ -1,5 +1,6 @@
 {
-    "camera_type": "pi_camera",
+    "camera_type": "auto",
+    "camera_preference": "usb_webcam",
     "camera_resolution": [640, 480],
     "camera_fps": 9,
     "usb_camera_index": 0,
