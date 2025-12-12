@@ -208,8 +208,13 @@ class SecuritySystem:
         best_distance = float('inf')
         
         for face_id, face_data in face_tracking_dict.items():
-            # Only match with faces seen recently (within last 2 seconds)
-            if current_time - face_data['first_seen'] < 2:
+            # Get last seen time (or first_seen if not updated)
+            last_seen = face_data.get('last_seen', face_data['first_seen'])
+            time_since_last_seen = current_time - last_seen
+            
+            # Match with faces seen within last 10 seconds (allows for brief detection gaps)
+            # This is important for unauthorized faces that need 5 seconds to trigger
+            if time_since_last_seen < 10:
                 # Calculate face distance
                 if 'encoding' in face_data:
                     try:
@@ -240,6 +245,7 @@ class SecuritySystem:
                     face_id = len(self.face_tracking)  # Simple ID generation
                     self.face_tracking[face_id] = {
                         'first_seen': current_time,
+                        'last_seen': current_time,
                         'ever_authorized': True,  # This face is authorized
                         'location': location,
                         'frame': frame.copy(),
@@ -252,6 +258,7 @@ class SecuritySystem:
                     self.face_tracking[face_id]['location'] = location
                     self.face_tracking[face_id]['frame'] = frame.copy()
                     self.face_tracking[face_id]['encoding'] = encoding
+                    self.face_tracking[face_id]['last_seen'] = current_time  # Update last seen time
                 
                 current_face_ids.add(face_id)
             
@@ -265,6 +272,7 @@ class SecuritySystem:
                     face_id = len(self.face_tracking)  # Simple ID generation
                     self.face_tracking[face_id] = {
                         'first_seen': current_time,
+                        'last_seen': current_time,
                         'ever_authorized': False,
                         'location': location,
                         'frame': frame.copy(),
@@ -276,6 +284,7 @@ class SecuritySystem:
                     self.face_tracking[face_id]['location'] = location
                     self.face_tracking[face_id]['frame'] = frame.copy()
                     self.face_tracking[face_id]['encoding'] = encoding
+                    self.face_tracking[face_id]['last_seen'] = current_time  # Update last seen time
                     # Don't change ever_authorized if it was True before
                 
                 current_face_ids.add(face_id)
@@ -317,6 +326,9 @@ class SecuritySystem:
                         # Send alert
                         alert_type = "REPEAT OFFENDER" if is_repeat_offender else "UNAUTHORIZED"
                         print(f"[DEBUG] ✓ Triggering alert for Face ID {face_id}: {alert_type}")
+                        print(f"[DEBUG]   - Elapsed time: {elapsed:.1f}s")
+                        print(f"[DEBUG]   - Required delay: {required_delay}s")
+                        print(f"[DEBUG]   - Ever authorized: {face_data['ever_authorized']}")
                         self.send_unauthorized_alert(face_data['frame'], face_data['location'], face_id, alert_type)
                         self.last_detection_time['unauthorized'] = current_time
                         
@@ -337,12 +349,26 @@ class SecuritySystem:
             
             # Remove faces that are no longer visible (not in current frame)
             # Keep them for a bit in case they come back
+            # For unauthorized faces, keep tracking longer to allow the 5-second delay
             faces_to_remove_old = []
             for face_id in self.face_tracking:
                 if face_id not in current_face_ids:
-                    # Face not seen in this frame, but keep tracking for 2 seconds
-                    if current_time - self.face_tracking[face_id]['first_seen'] > 2:
-                        faces_to_remove_old.append(face_id)
+                    face_data = self.face_tracking[face_id]
+                    # Get last time this face was seen (update it each time we see it)
+                    last_seen = face_data.get('last_seen', face_data['first_seen'])
+                    time_since_last_seen = current_time - last_seen
+                    
+                    # For unauthorized faces, keep tracking longer (at least 10 seconds)
+                    # For authorized faces, can remove sooner
+                    if not face_data.get('ever_authorized', False):
+                        # Unauthorized: keep for at least 10 seconds after last seen
+                        # This ensures we can track through brief detection gaps
+                        if time_since_last_seen > 10:
+                            faces_to_remove_old.append(face_id)
+                    else:
+                        # Authorized: can remove after 3 seconds
+                        if time_since_last_seen > 3:
+                            faces_to_remove_old.append(face_id)
             
             for face_id in faces_to_remove_old:
                 if face_id in self.face_tracking:
