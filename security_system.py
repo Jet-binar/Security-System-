@@ -303,13 +303,20 @@ class SecuritySystem:
                 # Determine delay: shorter for repeat offenders
                 required_delay = self.repeat_offender_delay if is_repeat_offender else self.unauthorized_delay
                 
+                # Debug output for unauthorized faces being tracked
+                if not face_data['ever_authorized']:
+                    print(f"[DEBUG] Face ID {face_id}: elapsed={elapsed:.1f}s/{required_delay}s, ever_authorized={face_data['ever_authorized']}")
+                
                 # If delay has passed and face was never authorized
                 if elapsed >= required_delay and not face_data['ever_authorized']:
                     # Check cooldown to avoid spamming
                     last_alert = self.last_detection_time.get('unauthorized', 0)
+                    cooldown_remaining = self.detection_cooldown - (current_time - last_alert)
+                    
                     if current_time - last_alert >= self.detection_cooldown:
                         # Send alert
                         alert_type = "REPEAT OFFENDER" if is_repeat_offender else "UNAUTHORIZED"
+                        print(f"[DEBUG] ✓ Triggering alert for Face ID {face_id}: {alert_type}")
                         self.send_unauthorized_alert(face_data['frame'], face_data['location'], face_id, alert_type)
                         self.last_detection_time['unauthorized'] = current_time
                         
@@ -417,15 +424,34 @@ class SecuritySystem:
         cv2.putText(frame_copy, alert_type, (left, top - 10),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         
-        cv2.imwrite(str(filepath), frame_copy)
-        print(f"  Photo saved: {filepath}")
+        # Save photo
+        try:
+            cv2.imwrite(str(filepath), frame_copy)
+            if filepath.exists():
+                print(f"  Photo saved: {filepath}")
+                print(f"  Photo absolute path: {filepath.absolute()}")
+                print(f"  Photo file size: {filepath.stat().st_size} bytes")
+            else:
+                print(f"  ERROR: Photo file was not created at {filepath}")
+                print(f"  Check directory permissions: {self.unauthorized_dir}")
+                return  # Don't send email if photo wasn't saved
+        except Exception as e:
+            print(f"  ERROR saving photo: {e}")
+            import traceback
+            traceback.print_exc()
+            return  # Don't send email if photo save failed
         
         # Send email
         try:
-            self.email_sender.send_alert(filepath, timestamp)
-            print("  Alert email sent successfully")
+            print(f"  Attempting to send email with photo: {filepath}")
+            # Convert Path to string for email sender
+            filepath_str = str(filepath.absolute())
+            self.email_sender.send_alert(filepath_str, timestamp)
+            print("  ✓ Alert email sent successfully")
         except Exception as e:
-            print(f"  Error sending email: {e}")
+            print(f"  ✗ Error sending email: {e}")
+            import traceback
+            traceback.print_exc()
     
     def process_frames_thread(self):
         """Background thread for processing face recognition"""
@@ -478,6 +504,8 @@ class SecuritySystem:
                         print(f"[DEBUG] Found {len(recognized)} recognized, {len(unrecognized)} unrecognized faces")
                     
                     # Update face tracking (handles 5-second delay and authorization checking)
+                    if unrecognized:
+                        print(f"[DEBUG] Processing {len(unrecognized)} unrecognized face(s)...")
                     self.update_face_tracking(recognized, unrecognized, original_frame)
                     
                     # Convert back to old format for display (without encodings)
