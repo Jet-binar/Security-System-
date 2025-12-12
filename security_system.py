@@ -539,6 +539,7 @@ class SecuritySystem:
         process_every_n_frames = self.config.get('process_every_n_frames', 2)
         frame_count = 0
         motion_check_counter = 0
+        last_debug_time = time.time()
         
         while self.running:
             try:
@@ -571,7 +572,17 @@ class SecuritySystem:
                 # Process face recognition at adaptive interval AND minimum time interval
                 if frame_count % scan_interval == 0 and time_since_last_process >= self.min_processing_interval:
                     self.last_processing_time = current_time
+                    
+                    # Debug output every 5 seconds
+                    if current_time - last_debug_time > 5:
+                        print(f"[DEBUG] Processing frame {frame_count}, scan_interval={scan_interval}, motion={self.motion_detected}, known_faces={len(self.known_faces)}")
+                        last_debug_time = current_time
+                    
                     recognized, unrecognized = self.recognize_face(original_frame)
+                    
+                    # Debug if faces found
+                    if recognized or unrecognized:
+                        print(f"[DEBUG] Found {len(recognized)} recognized, {len(unrecognized)} unrecognized faces")
                     
                     # Update face tracking (handles 5-second delay and authorization checking)
                     self.update_face_tracking(recognized, unrecognized, original_frame)
