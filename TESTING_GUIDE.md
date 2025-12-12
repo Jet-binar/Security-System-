@@ -1,238 +1,285 @@
 # Testing Guide for Security System
 
-This guide will help you test your security system step by step.
+This guide will help you test all the features of your security system.
 
-## Prerequisites
+## 1. Test Email Functionality
 
-1. Raspberry Pi 5 with camera connected
-2. SSH access to Raspberry Pi
-3. Project files on Raspberry Pi
-
-## Step 1: Clone/Transfer Project to Raspberry Pi
-
-### Option A: Clone from GitHub
-```bash
-cd ~
-git clone https://github.com/Jet-binar/Security-System-.git
-cd Security-System-
-```
-
-### Option B: If already transferred via SCP
-```bash
-cd ~/security_system
-# or wherever you copied the files
-```
-
-## Step 2: Install Dependencies
+### On Your Local Machine (Windows):
 
 ```bash
-# Update system
-sudo apt update
-
-# Install system dependencies
-sudo apt install -y python3-pip python3-venv python3-picamera2
-sudo apt install -y cmake build-essential libopenblas-dev liblapack-dev
-sudo apt install -y python3-dev python3-setuptools
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install Python packages
-pip install --upgrade pip
-pip install -r requirements.txt
+python simple_email_test.py
 ```
 
-**Note:** Installing `dlib` and `face_recognition` can take 10-30 minutes. Be patient!
+**Expected Output:**
+```
+============================================================
+SIMPLE EMAIL TEST
+============================================================
+SMTP Server: smtp.gmail.com
+SMTP Port: 587
+Sender: consultingjetmir@gmail.com
+Recipient: consultingjetmir@gmail.com
 
-## Step 3: Test Camera
+Attempting to connect to SMTP server...
+Connected! Starting TLS...
+TLS started! Attempting login...
+Login successful! Sending email...
+
+SUCCESS! Email sent successfully!
+Check your inbox: consultingjetmir@gmail.com
+Also check spam/junk folder if you don't see it.
+```
+
+**What to Check:**
+- ✅ Email appears in your inbox (check spam folder too)
+- ✅ Email subject: "TEST: Security System Email Test"
+- ✅ Email contains test message
+
+### On Raspberry Pi:
 
 ```bash
-# Test if camera is detected
-libcamera-hello --list-cameras
-
-# Take a test photo
-libcamera-jpeg -o test.jpg
-
-# If camera works, you should see test.jpg created
-ls -la test.jpg
+cd ~/Documents/SECURITY-System-
+source venv/bin/activate  # If using virtual environment
+python3 simple_email_test.py
 ```
 
-## Step 4: Test Face Management
+## 2. Test Full Security System
 
-### Test adding a face from camera:
+### On Raspberry Pi:
+
 ```bash
-python3 manage_faces.py capture "TestPerson"
+cd ~/Documents/SECURITY-System-
+source venv/bin/activate  # If using virtual environment
+python3 security_system.py
 ```
 
-This will:
-- Open camera preview
-- Detect your face
-- Press SPACE to capture
-- Save to `authorized_faces/TestPerson.jpg`
+### What to Test:
 
-### Test listing faces:
+#### Test 1: Authorized Person Detection
+1. **Setup:** Add yourself to authorized faces first:
+   ```bash
+   python3 manage_faces.py --add "Your Name"
+   ```
+   Follow the prompts to capture your face.
+
+2. **Test:** Stand in front of the camera
+   - ✅ Should see "Authorized: Your Name" on screen
+   - ✅ No email should be sent
+   - ✅ Green box around your face
+
+#### Test 2: Unauthorized Person Detection
+1. **Setup:** Have someone NOT in the authorized list stand in front of camera
+
+2. **Test:** 
+   - ✅ After 5 seconds, you should see:
+     - Red box around the face
+     - "⚠️ UNAUTHORIZED PERSON DETECTED!" message
+     - "Photo saved: unauthorized_YYYYMMDD_HHMMSS.jpg"
+     - "Alert email sent successfully"
+   - ✅ Check your email for the alert with photo attached
+   - ✅ Photo should be saved in `unauthorized_detections/` folder
+
+#### Test 3: Repeat Offender Detection
+1. **Setup:** Same unauthorized person from Test 2
+
+2. **Test:**
+   - ✅ Person leaves camera view
+   - ✅ Person returns after a few minutes
+   - ✅ Alert should trigger after only **1 second** (not 5 seconds)
+   - ✅ Email should be sent faster
+
+#### Test 4: Motion Detection
+1. **Setup:** Ensure `motion_detection_enabled: true` in config.json
+
+2. **Test:**
+   - ✅ When no motion: System scans less frequently (every 40 frames)
+   - ✅ When motion detected: System scans more frequently (every 20 frames)
+   - ✅ Camera feed should remain smooth
+
+## 3. Verify Email Configuration
+
+### Check config.json:
+
 ```bash
-python3 manage_faces.py list
+cat config.json | grep -A 5 email
 ```
 
-Should show:
-```
-Authorized Faces (1):
-----------------------------------------
-  - TestPerson
-```
-
-### Test adding face from image file:
-```bash
-# If you have a photo file
-python3 manage_faces.py add /path/to/photo.jpg -n "PersonName"
-```
-
-## Step 5: Configure Email (Optional for Testing)
-
-Edit `config.json`:
+**Should show:**
 ```json
-{
-    "email": {
-        "sender_email": "your_email@gmail.com",
-        "sender_password": "your_app_password",
-        "recipient_email": "recipient@gmail.com"
-    }
+"email": {
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "sender_email": "consultingjetmir@gmail.com",
+    "sender_password": "dkvvsempreyldobe",
+    "recipient_email": "consultingjetmir@gmail.com"
 }
 ```
 
-**For Gmail:** Use an [App Password](https://support.google.com/accounts/answer/185833), not your regular password.
+## 4. Test Camera Feed
 
-## Step 6: Test Security System
-
-### Basic Test (without email):
-```bash
-# Make sure you're in the project directory
-cd ~/Security-System-  # or your project path
-source venv/bin/activate
-
-# Run the security system
-python3 security_system.py
-```
-
-**What to expect:**
-- Camera feed should open
-- Your authorized face should show with green box and name
-- If someone unauthorized appears, red box with "UNAUTHORIZED"
-- Press `q` to quit
-
-### Test with Unauthorized Person:
-1. Add your face as authorized (Step 4)
-2. Run security system
-3. Have someone else (or cover your face) stand in front of camera
-4. System should:
-   - Show red box
-   - Save photo to `unauthorized_detections/` folder
-   - Send email (if configured)
-
-## Step 7: Verify Files Created
+### Check camera is working:
 
 ```bash
-# Check authorized faces
-ls -la authorized_faces/
-
-# Check unauthorized detections
-ls -la unauthorized_detections/
-
-# Should see captured photos
+python3 -c "from picamera2 import Picamera2; import time; cam = Picamera2(); cam.start(); time.sleep(2); cam.stop(); print('Camera OK')"
 ```
 
-## Step 8: Test Email (If Configured)
+**Expected:** "Camera OK" message
 
-To test email without waiting for unauthorized person:
+## 5. Test Face Recognition
+
+### Check if faces are loaded:
+
+When you run `security_system.py`, look for:
+```
+Loading authorized faces...
+Loaded 1 authorized face(s)
+```
+
+If you see "Loaded 0 authorized face(s)", add faces first:
+```bash
+python3 manage_faces.py --add "Test Person"
+```
+
+## 6. Troubleshooting Tests
+
+### Email Not Sending?
+
+1. **Test email connection:**
+   ```bash
+   python3 simple_email_test.py
+   ```
+
+2. **Check error messages:**
+   - "SMTP Authentication Error" → Check app password
+   - "Connection refused" → Check internet/firewall
+   - "Email configuration incomplete" → Check config.json
+
+3. **Verify Gmail settings:**
+   - ✅ 2-Factor Authentication enabled
+   - ✅ App Password generated (16 characters, no spaces)
+   - ✅ App Password entered correctly in config.json
+
+### Camera Not Working?
+
+1. **Check camera connection:**
+   ```bash
+   libcamera-hello --list-cameras
+   ```
+
+2. **Test camera capture:**
+   ```bash
+   libcamera-still -o test.jpg
+   ```
+
+3. **Check permissions:**
+   ```bash
+   groups | grep video
+   ```
+   If not in video group: `sudo usermod -a -G video $USER` (then logout/login)
+
+### Face Recognition Not Working?
+
+1. **Check if faces are loaded:**
+   - Look for "Loaded X authorized face(s)" message
+   - Check `authorized_faces/` folder has `.jpg` files
+
+2. **Test face detection:**
+   - Make sure face is clearly visible
+   - Good lighting helps
+   - Face should be facing camera directly
+
+3. **Check console output:**
+   - Look for "Recognized:" or "Unrecognized:" messages
+   - Check for any error messages
+
+## 7. Performance Testing
+
+### Monitor System Resources:
 
 ```bash
-# Create a test script
-cat > test_email.py << 'EOF'
-from email_sender import EmailSender
-import config
-
-cfg = config.load_config()
-sender = EmailSender(cfg)
-
-# Create a dummy image path (or use existing)
-import os
-test_image = "test.jpg"  # or any image file
-if os.path.exists(test_image):
-    sender.send_alert(test_image, "20250101_120000")
-    print("Test email sent!")
-else:
-    print("Create test.jpg first with: libcamera-jpeg -o test.jpg")
-EOF
-
-python3 test_email.py
+# In another terminal while security_system.py is running
+htop
+# or
+top
 ```
 
-## Troubleshooting
+**What to check:**
+- ✅ CPU usage should be reasonable (< 80% on average)
+- ✅ Memory usage should be stable
+- ✅ Camera feed should be smooth (no stuttering)
 
-### Camera not detected:
-```bash
-# Enable camera in raspi-config
-sudo raspi-config
-# Navigate to: Interface Options → Camera → Enable
+### Check Processing Speed:
 
-# Reboot
-sudo reboot
-```
+Watch the console output for:
+- Frame processing messages
+- "Processing frame..." messages
+- Time between detections
 
-### Face recognition not working:
-- Ensure good lighting
-- Face should be clearly visible
-- Try adjusting tolerance in `config.json`: `"face_recognition_tolerance": 0.5` (lower = stricter)
+## 8. Integration Test (Full Workflow)
 
-### Import errors:
-```bash
-# Make sure virtual environment is activated
-source venv/bin/activate
+### Complete Test Scenario:
 
-# Reinstall packages
-pip install --force-reinstall -r requirements.txt
-```
+1. **Start the system:**
+   ```bash
+   python3 security_system.py
+   ```
 
-### Performance issues:
-- Lower camera resolution in `config.json`
-- Increase `process_every_n_frames` (processes fewer frames)
+2. **Test sequence:**
+   - ✅ Authorized person appears → No alert
+   - ✅ Unauthorized person appears → Wait 5 seconds → Email sent
+   - ✅ Unauthorized person leaves
+   - ✅ Same unauthorized person returns → Wait 1 second → Email sent (repeat offender)
+   - ✅ Authorized person appears again → No alert
 
-## Quick Test Checklist
+3. **Verify results:**
+   - ✅ Check email inbox for alerts
+   - ✅ Check `unauthorized_detections/` folder for saved photos
+   - ✅ Check console for all expected messages
 
-- [ ] Camera works (`libcamera-hello`)
-- [ ] Dependencies installed (`pip list | grep face`)
-- [ ] Can add face (`manage_faces.py capture`)
-- [ ] Can list faces (`manage_faces.py list`)
-- [ ] Security system runs (`python3 security_system.py`)
-- [ ] Recognizes authorized face (green box)
-- [ ] Detects unauthorized (red box)
-- [ ] Saves unauthorized photos
-- [ ] Sends email (if configured)
+## 9. Quick Test Checklist
 
-## Running in Background
+- [ ] Email test script runs successfully
+- [ ] Email received in inbox
+- [ ] Camera feed displays smoothly
+- [ ] Authorized faces are recognized
+- [ ] Unauthorized faces trigger alerts after 5 seconds
+- [ ] Repeat offenders trigger alerts after 1 second
+- [ ] Photos are saved correctly
+- [ ] Emails include photo attachments
+- [ ] System runs without crashes
+- [ ] Performance is acceptable (smooth camera feed)
 
-To run security system continuously:
+## 10. Common Issues and Solutions
 
-```bash
-# Using nohup
-nohup python3 security_system.py > security.log 2>&1 &
+### Issue: "Email configuration incomplete"
+**Solution:** Check config.json has all email fields filled
 
-# Or using screen
-screen -S security
-python3 security_system.py
-# Press Ctrl+A then D to detach
-# Reattach with: screen -r security
-```
+### Issue: "Cannot send email: Email configuration incomplete"
+**Solution:** Verify sender_email, sender_password, and recipient_email are set
 
-## View Logs
+### Issue: Camera stuttering
+**Solution:** 
+- Lower resolution in config.json
+- Increase `process_every_n_frames` value
+- Check system resources (CPU/memory)
 
-```bash
-# If using nohup
-tail -f security.log
+### Issue: No faces detected
+**Solution:**
+- Check lighting
+- Ensure face is clearly visible
+- Verify camera is working
+- Check face_recognition library is installed
 
-# Check system status
-ps aux | grep security_system
-```
+### Issue: False positives (authorized person marked as unauthorized)
+**Solution:**
+- Re-add the person with better lighting/angle
+- Lower `face_recognition_tolerance` in config.json (try 0.5)
 
+## Need Help?
+
+If tests fail, check:
+1. Console error messages
+2. Email test script output
+3. System logs
+4. Camera permissions
+5. Network connectivity (for email)
