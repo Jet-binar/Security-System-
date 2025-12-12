@@ -46,16 +46,32 @@ def main():
     # Check system devices
     print("\n1. Checking system for video devices...")
     import subprocess
+    import os
     try:
-        result = subprocess.run(['ls', '/dev/video*'], capture_output=True, text=True)
+        # Try ls command first
+        result = subprocess.run(['ls', '/dev/video*'], capture_output=True, text=True, shell=True)
         if result.returncode == 0 and result.stdout.strip():
             print("  Found video devices:")
             for line in result.stdout.strip().split('\n'):
                 print(f"    {line}")
         else:
-            print("  ⚠️  No /dev/video* devices found")
-    except:
-        print("  ⚠️  Could not check /dev/video* devices")
+            # Try checking if video devices exist with glob
+            import glob
+            video_devices = glob.glob('/dev/video*')
+            if video_devices:
+                print("  Found video devices:")
+                for device in video_devices:
+                    # Check permissions
+                    perms = os.stat(device)
+                    print(f"    {device} (permissions: {oct(perms.st_mode)[-3:]})")
+            else:
+                print("  ⚠️  No /dev/video* devices found")
+                print("\n  This is likely a permissions or driver issue.")
+                print("  Try these commands:")
+                print("    sudo modprobe uvcvideo")
+                print("    ls -l /dev/video*")
+    except Exception as e:
+        print(f"  ⚠️  Could not check /dev/video* devices: {e}")
     
     # Check USB devices
     print("\n2. Checking USB devices...")
@@ -90,13 +106,22 @@ def main():
         print(f'  "usb_camera_index": {working_cameras[0]}')
     else:
         print("❌ No working cameras found!")
-        print("\nTroubleshooting:")
-        print("  1. Make sure USB camera is connected")
-        print("  2. Check USB cable connection")
-        print("  3. Try a different USB port")
-        print("  4. Check if camera works on another computer")
-        print("  5. Make sure no other application is using the camera")
-        print("  6. Try: sudo modprobe v4l2loopback (if using virtual camera)")
+        print("\nTroubleshooting steps:")
+        print("\n1. Load USB video driver:")
+        print("   sudo modprobe uvcvideo")
+        print("\n2. Check if video devices appear:")
+        print("   ls -l /dev/video*")
+        print("\n3. Check camera permissions:")
+        print("   groups  # Should include 'video' group")
+        print("   If not, run: sudo usermod -a -G video $USER")
+        print("   Then logout and login again")
+        print("\n4. Check if camera needs different backend:")
+        print("   Try: v4l2-ctl --list-devices")
+        print("\n5. Try different USB port (USB 2.0 recommended)")
+        print("\n6. Check dmesg for errors:")
+        print("   dmesg | tail -20")
+        print("\n7. If still not working, use Pi Camera:")
+        print('   Edit config.json: "camera_type": "pi_camera"')
         sys.exit(1)
 
 if __name__ == "__main__":
