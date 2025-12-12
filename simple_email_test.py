@@ -96,4 +96,3 @@ If you received this email, your email configuration is working correctly!
 
 if __name__ == "__main__":
     test_email_simple()
-

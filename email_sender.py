@@ -110,4 +110,3 @@ This is an automated message from your Raspberry Pi Security System.
             import traceback
             traceback.print_exc()
             raise
-
