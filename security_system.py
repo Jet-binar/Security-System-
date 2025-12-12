@@ -126,43 +126,79 @@ class SecuritySystem:
     
     def setup_usb_webcam(self):
         """Setup USB Webcam (e.g., Logitech C920e)"""
+        resolution = tuple(self.config['camera_resolution'])
+        target_fps = self.config.get('camera_fps', 9)
+        preferred_index = self.config.get('usb_camera_index', 0)
+        
+        # Try multiple camera indices (0, 1, 2)
+        camera_indices = [preferred_index, 0, 1, 2]
+        camera_indices = list(dict.fromkeys(camera_indices))  # Remove duplicates while preserving order
+        
+        for camera_index in camera_indices:
+            try:
+                print(f"  Trying USB camera index {camera_index}...")
+                self.usb_camera = cv2.VideoCapture(camera_index)
+                
+                if not self.usb_camera.isOpened():
+                    if self.usb_camera:
+                        self.usb_camera.release()
+                    continue  # Try next index
+                
+                # Set camera properties
+                self.usb_camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+                self.usb_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
+                self.usb_camera.set(cv2.CAP_PROP_FPS, target_fps)
+                
+                # Allow camera to stabilize
+                time.sleep(1)
+                
+                # Test capture - try multiple times
+                ret = False
+                test_frame = None
+                for attempt in range(5):
+                    ret, test_frame = self.usb_camera.read()
+                    if ret and test_frame is not None:
+                        break
+                    time.sleep(0.2)
+                
+                if not ret or test_frame is None:
+                    print(f"    Camera {camera_index} opened but could not capture frame")
+                    self.usb_camera.release()
+                    continue  # Try next index
+                
+                actual_width = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                actual_fps = int(self.usb_camera.get(cv2.CAP_PROP_FPS))
+                
+                print(f"✓ USB Webcam initialized at index {camera_index}: {actual_width}x{actual_height} @ {actual_fps} FPS")
+                self.camera_type = 'usb_webcam'
+                return  # Success!
+                
+            except Exception as e:
+                print(f"    Error with camera index {camera_index}: {e}")
+                if self.usb_camera:
+                    try:
+                        self.usb_camera.release()
+                    except:
+                        pass
+                continue  # Try next index
+        
+        # If we get here, all indices failed
+        print("\n❌ ERROR: Could not initialize USB webcam at any index (0, 1, 2)")
+        print("\nTroubleshooting steps:")
+        print("  1. Check USB camera is connected: lsusb")
+        print("  2. Check camera permissions: ls -l /dev/video*")
+        print("  3. Try different camera index in config.json: 'usb_camera_index': 1 or 2")
+        print("  4. Make sure no other app is using the camera")
+        print("  5. Try switching to Pi Camera: 'camera_type': 'pi_camera'")
+        print("\nFalling back to Raspberry Pi Camera...")
+        
+        # Fallback to Pi Camera
         try:
-            camera_index = self.config.get('usb_camera_index', 0)  # Usually 0 for first USB camera
-            resolution = tuple(self.config['camera_resolution'])
-            target_fps = self.config.get('camera_fps', 9)
-            
-            self.usb_camera = cv2.VideoCapture(camera_index)
-            
-            if not self.usb_camera.isOpened():
-                raise Exception(f"Could not open USB camera at index {camera_index}")
-            
-            # Set camera properties
-            self.usb_camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
-            self.usb_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
-            self.usb_camera.set(cv2.CAP_PROP_FPS, target_fps)
-            
-            # Allow camera to stabilize
-            time.sleep(2)
-            
-            # Test capture
-            ret, test_frame = self.usb_camera.read()
-            if not ret:
-                raise Exception("Could not capture test frame from USB camera")
-            
-            actual_width = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-            actual_height = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            actual_fps = int(self.usb_camera.get(cv2.CAP_PROP_FPS))
-            
-            print(f"✓ USB Webcam initialized at {actual_width}x{actual_height} @ {actual_fps} FPS")
-            self.camera_type = 'usb_webcam'
+            self.setup_pi_camera()
         except Exception as e:
-            print(f"Error setting up USB webcam: {e}")
-            if self.camera_type == 'usb_webcam':
-                print("ERROR: Could not initialize USB webcam. Please check:")
-                print("  1. USB camera is connected")
-                print("  2. Camera index is correct (try 0, 1, or 2)")
-                print("  3. No other application is using the camera")
-                raise
+            print(f"❌ ERROR: Pi Camera also failed: {e}")
+            raise Exception("Could not initialize any camera. Please check your camera connection.")
     
     def capture_frame(self):
         """Capture a frame from the active camera"""
