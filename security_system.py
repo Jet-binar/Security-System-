@@ -66,6 +66,11 @@ class SecuritySystem:
         self.repeat_offender_delay = self.config.get('repeat_offender_delay', 1)  # Shorter delay for repeat offenders
         self.unauthorized_memory_time = self.config.get('unauthorized_memory_time', 3600)  # Remember for 1 hour (3600 seconds)
         
+        # Track when each face last triggered an alert (to prevent duplicate emails for same person)
+        self.face_alert_times = {}  # {face_encoding_hash: last_alert_time}
+        self.face_alert_times_lock = threading.Lock()
+        self.same_person_alert_cooldown = self.config.get('same_person_alert_cooldown', 900)  # 15 minutes default
+        
         # Threading for smooth camera feed
         self.frame_queue = Queue(maxsize=2)  # Keep only latest frames
         self.latest_results = {'recognized': [], 'unrecognized': []}
@@ -318,11 +323,30 @@ class SecuritySystem:
                 
                 # If delay has passed and face was never authorized
                 if elapsed >= required_delay and not face_data['ever_authorized']:
-                    # Check cooldown to avoid spamming
-                    last_alert = self.last_detection_time.get('unauthorized', 0)
-                    cooldown_remaining = self.detection_cooldown - (current_time - last_alert)
+                    # Check if this specific face has already triggered an alert recently
+                    can_send_alert = True
+                    face_encoding_hash = None
                     
-                    if current_time - last_alert >= self.detection_cooldown:
+                    if 'encoding' in face_data:
+                        # Create a hash of the face encoding to identify the same person
+                        # Use the first few values of the encoding as a simple hash
+                        encoding = face_data['encoding']
+                        face_encoding_hash = hash(tuple(encoding[:10]))  # Use first 10 values for hash
+                        
+                        with self.face_alert_times_lock:
+                            last_alert_time = self.face_alert_times.get(face_encoding_hash, 0)
+                            time_since_last_alert = current_time - last_alert_time
+                            
+                            if time_since_last_alert < self.same_person_alert_cooldown:
+                                can_send_alert = False
+                                cooldown_remaining = self.same_person_alert_cooldown - time_since_last_alert
+                                print(f"[DEBUG] Same person alert cooldown: {cooldown_remaining:.0f}s remaining (last alert {time_since_last_alert:.0f}s ago)")
+                    
+                    # Also check global cooldown to avoid spamming
+                    last_alert = self.last_detection_time.get('unauthorized', 0)
+                    global_cooldown_ok = current_time - last_alert >= self.detection_cooldown
+                    
+                    if can_send_alert and global_cooldown_ok:
                         # Send alert
                         alert_type = "REPEAT OFFENDER" if is_repeat_offender else "UNAUTHORIZED"
                         print(f"[DEBUG] ✓ Triggering alert for Face ID {face_id}: {alert_type}")
@@ -332,12 +356,20 @@ class SecuritySystem:
                         self.send_unauthorized_alert(face_data['frame'], face_data['location'], face_id, alert_type)
                         self.last_detection_time['unauthorized'] = current_time
                         
+                        # Record that this face triggered an alert
+                        if face_encoding_hash is not None:
+                            with self.face_alert_times_lock:
+                                self.face_alert_times[face_encoding_hash] = current_time
+                        
                         # Add to previously unauthorized list if not already there
                         if 'encoding' in face_data and not is_repeat_offender:
                             with self.previously_unauthorized_lock:
                                 self.previously_unauthorized.append((face_data['encoding'].copy(), current_time))
                         
                         faces_to_remove.append(face_id)
+                    elif not global_cooldown_ok:
+                        cooldown_remaining = self.detection_cooldown - (current_time - last_alert)
+                        print(f"[DEBUG] Global alert cooldown: {cooldown_remaining:.1f}s remaining")
                 # If face was authorized, we can remove it from tracking after a delay
                 elif face_data['ever_authorized'] and elapsed > 10:
                     faces_to_remove.append(face_id)
@@ -380,6 +412,13 @@ class SecuritySystem:
                     (encoding, prev_time) for encoding, prev_time in self.previously_unauthorized
                     if current_time - prev_time < self.unauthorized_memory_time
                 ]
+            
+            # Clean up old face alert times (older than cooldown period)
+            with self.face_alert_times_lock:
+                self.face_alert_times = {
+                    face_hash: alert_time for face_hash, alert_time in self.face_alert_times.items()
+                    if current_time - alert_time < self.same_person_alert_cooldown
+                }
     
     def draw_face_box(self, frame, location, name, color=(0, 255, 0)):
         """Draw a box around a face with the name"""

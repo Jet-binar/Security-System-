@@ -33,6 +33,7 @@ def load_config(config_file='config.json'):
         "unauthorized_delay": 5,
         "repeat_offender_delay": 1,
         "unauthorized_memory_time": 3600,
+        "same_person_alert_cooldown": 900,  # 15 minutes - prevent duplicate emails for same person
         "motion_detection_enabled": True,
         "motion_threshold": 5000,
         "motion_check_interval": 10,
