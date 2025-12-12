@@ -34,6 +34,8 @@ class SecuritySystem:
         """Initialize the security system"""
         self.config = config.load_config()
         self.camera = None
+        self.camera_type = None  # 'pi_camera' or 'usb_webcam'
+        self.usb_camera = None  # OpenCV VideoCapture for USB webcam
         self.known_faces = []
         self.known_names = []
         self.email_sender = EmailSender(self.config)
@@ -89,22 +91,91 @@ class SecuritySystem:
             print(f"Motion detection: ENABLED (adaptive scanning)")
     
     def setup_camera(self):
-        """Configure and start the Raspberry Pi camera"""
-        print("Setting up camera...")
-        self.camera = Picamera2()
+        """Configure and start camera (Pi Camera or USB Webcam)"""
+        camera_type = self.config.get('camera_type', 'pi_camera')  # 'pi_camera' or 'usb_webcam'
+        self.camera_type = camera_type
         
-        # Get FPS setting from config (default to 9)
-        target_fps = self.config.get('camera_fps', 9)
+        print(f"Setting up camera ({camera_type})...")
         
-        # Configure camera
-        camera_config = self.camera.create_preview_configuration(
-            main={"size": tuple(self.config['camera_resolution'])},
-            controls={"FrameRate": target_fps}
-        )
-        self.camera.configure(camera_config)
-        self.camera.start()
-        time.sleep(2)  # Allow camera to stabilize
-        print(f"Camera initialized at {self.config['camera_resolution']} @ {target_fps} FPS")
+        if camera_type == 'usb_webcam':
+            self.setup_usb_webcam()
+        else:
+            self.setup_pi_camera()
+    
+    def setup_pi_camera(self):
+        """Setup Raspberry Pi Camera Module"""
+        try:
+            self.camera = Picamera2()
+            
+            # Get FPS setting from config (default to 9)
+            target_fps = self.config.get('camera_fps', 9)
+            
+            # Configure camera
+            camera_config = self.camera.create_preview_configuration(
+                main={"size": tuple(self.config['camera_resolution'])},
+                controls={"FrameRate": target_fps}
+            )
+            self.camera.configure(camera_config)
+            self.camera.start()
+            time.sleep(2)  # Allow camera to stabilize
+            print(f"✓ Raspberry Pi Camera initialized at {self.config['camera_resolution']} @ {target_fps} FPS")
+        except Exception as e:
+            print(f"Error setting up Pi Camera: {e}")
+            print("Falling back to USB webcam...")
+            self.setup_usb_webcam()
+    
+    def setup_usb_webcam(self):
+        """Setup USB Webcam (e.g., Logitech C920e)"""
+        try:
+            camera_index = self.config.get('usb_camera_index', 0)  # Usually 0 for first USB camera
+            resolution = tuple(self.config['camera_resolution'])
+            target_fps = self.config.get('camera_fps', 9)
+            
+            self.usb_camera = cv2.VideoCapture(camera_index)
+            
+            if not self.usb_camera.isOpened():
+                raise Exception(f"Could not open USB camera at index {camera_index}")
+            
+            # Set camera properties
+            self.usb_camera.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+            self.usb_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
+            self.usb_camera.set(cv2.CAP_PROP_FPS, target_fps)
+            
+            # Allow camera to stabilize
+            time.sleep(2)
+            
+            # Test capture
+            ret, test_frame = self.usb_camera.read()
+            if not ret:
+                raise Exception("Could not capture test frame from USB camera")
+            
+            actual_width = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = int(self.usb_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            actual_fps = int(self.usb_camera.get(cv2.CAP_PROP_FPS))
+            
+            print(f"✓ USB Webcam initialized at {actual_width}x{actual_height} @ {actual_fps} FPS")
+            self.camera_type = 'usb_webcam'
+        except Exception as e:
+            print(f"Error setting up USB webcam: {e}")
+            if self.camera_type == 'usb_webcam':
+                print("ERROR: Could not initialize USB webcam. Please check:")
+                print("  1. USB camera is connected")
+                print("  2. Camera index is correct (try 0, 1, or 2)")
+                print("  3. No other application is using the camera")
+                raise
+    
+    def capture_frame(self):
+        """Capture a frame from the active camera"""
+        if self.camera_type == 'usb_webcam':
+            ret, frame = self.usb_camera.read()
+            if not ret:
+                raise Exception("Failed to capture frame from USB webcam")
+            return frame  # USB webcam already returns BGR format
+        else:
+            # Pi Camera
+            frame = self.camera.capture_array()
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR
+            return frame_bgr
     
     def load_authorized_faces(self):
         """Load all authorized faces from the faces directory"""
@@ -512,8 +583,7 @@ class SecuritySystem:
         try:
             while True:
                 # Capture frame (this is fast, doesn't block)
-                frame = self.camera.capture_array()
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # Convert to BGR for OpenCV
+                frame_bgr = self.capture_frame()
                 
                 # Resize frame for display (smaller = faster)
                 display_frame = cv2.resize(frame_bgr, display_size) if display_size != tuple(frame_bgr.shape[:2][::-1]) else frame_bgr.copy()
@@ -674,8 +744,12 @@ class SecuritySystem:
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing_thread.join(timeout=2.0)
         
-        if self.camera:
+        # Clean up camera
+        if self.camera_type == 'usb_webcam' and self.usb_camera:
+            self.usb_camera.release()
+        elif self.camera:
             self.camera.stop()
+        
         cv2.destroyAllWindows()
         print("Security system stopped.")
 
