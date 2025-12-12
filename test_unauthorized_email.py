@@ -37,10 +37,14 @@ def test_unauthorized_alert():
     time.sleep(3)
     
     try:
-        frame = system.capture_frame()
-        if frame is None:
+        # Capture frame from camera
+        frame_rgb = system.camera.capture_array()
+        if frame_rgb is None:
             print("   ✗ Failed to capture frame from camera")
             return
+        
+        # Convert RGB to BGR for OpenCV
+        frame = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
         
         print(f"   ✓ Frame captured: {frame.shape}")
         
