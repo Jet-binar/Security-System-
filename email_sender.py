@@ -67,12 +67,20 @@ This is an automated message from your Raspberry Pi Security System.
             
             # Attach image
             if Path(image_path).exists():
-                with open(image_path, 'rb') as f:
-                    img_data = f.read()
-                    image = MIMEImage(img_data)
-                    image.add_header('Content-Disposition', 
-                                   f'attachment; filename="{Path(image_path).name}"')
-                    msg.attach(image)
+                try:
+                    with open(image_path, 'rb') as f:
+                        img_data = f.read()
+                        image = MIMEImage(img_data)
+                        image.add_header('Content-Disposition', 
+                                       f'attachment; filename="{Path(image_path).name}"')
+                        msg.attach(image)
+                        print(f"  Image attached: {Path(image_path).name}")
+                except Exception as e:
+                    print(f"  Warning: Could not attach image: {e}")
+                    print(f"  Email will be sent without image attachment")
+            else:
+                print(f"  Warning: Image file not found: {image_path}")
+                print(f"  Email will be sent without image attachment")
             
             # Send email
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
@@ -84,7 +92,22 @@ This is an automated message from your Raspberry Pi Security System.
             
             print(f"Alert email sent to {self.recipient_email}")
         
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = f"SMTP Authentication Error: {e}"
+            print(f"Error sending email: {error_msg}")
+            print("Common causes:")
+            print("  - Wrong email address or password")
+            print("  - For Gmail: Make sure you're using an App Password, not your regular password")
+            print("  - For Gmail: Make sure 2-Factor Authentication is enabled")
+            raise
+        except smtplib.SMTPException as e:
+            error_msg = f"SMTP Error: {e}"
+            print(f"Error sending email: {error_msg}")
+            raise
         except Exception as e:
-            print(f"Error sending email: {e}")
+            error_msg = f"Unexpected error: {e}"
+            print(f"Error sending email: {error_msg}")
+            import traceback
+            traceback.print_exc()
             raise
 
