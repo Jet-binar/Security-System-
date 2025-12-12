@@ -29,3 +29,6 @@ Thumbs.db
 *.png
 !README.md
 
+# Configuration with sensitive data
+config.json
+
