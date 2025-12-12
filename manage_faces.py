@@ -115,80 +115,28 @@ def remove_face(name):
     return True
 
 
-def capture_face_from_camera(name, camera_type='auto'):
-    """Capture a face directly from camera (Pi Camera or USB Webcam)"""
+def capture_face_from_camera(name):
+    """Capture a face directly from camera"""
+    from picamera2 import Picamera2
     import time
     
     print(f"Capturing face for: {name}")
     print("Position yourself in front of the camera...")
     
-    camera = None
-    usb_camera = None
-    use_usb = False
-    
-    # Try to detect camera type
-    if camera_type == 'auto':
-        # Try USB webcam first (more common for external cameras)
-        try:
-            usb_camera = cv2.VideoCapture(0)
-            if usb_camera.isOpened():
-                ret, test_frame = usb_camera.read()
-                if ret:
-                    use_usb = True
-                    print("Using USB webcam")
-                else:
-                    usb_camera.release()
-            else:
-                usb_camera.release()
-        except:
-            pass
-        
-        # If USB didn't work, try Pi Camera
-        if not use_usb:
-            try:
-                from picamera2 import Picamera2
-                camera = Picamera2()
-                camera_config = camera.create_preview_configuration(
-                    main={"size": (1280, 720)}
-                )
-                camera.configure(camera_config)
-                camera.start()
-                time.sleep(2)
-                print("Using Raspberry Pi Camera")
-            except Exception as e:
-                print(f"Could not initialize Pi Camera: {e}")
-                if usb_camera:
-                    usb_camera.release()
-                raise Exception("No camera available")
-    elif camera_type == 'usb_webcam':
-        usb_camera = cv2.VideoCapture(0)
-        if not usb_camera.isOpened():
-            raise Exception("Could not open USB webcam")
-        use_usb = True
-        print("Using USB webcam")
-    else:  # pi_camera
-        from picamera2 import Picamera2
-        camera = Picamera2()
-        camera_config = camera.create_preview_configuration(
-            main={"size": (1280, 720)}
-        )
-        camera.configure(camera_config)
-        camera.start()
-        time.sleep(2)
-        print("Using Raspberry Pi Camera")
+    camera = Picamera2()
+    camera_config = camera.create_preview_configuration(
+        main={"size": (1280, 720)}
+    )
+    camera.configure(camera_config)
+    camera.start()
+    time.sleep(2)
     
     print("Press SPACE to capture, ESC to cancel")
     
     try:
         while True:
-            if use_usb:
-                ret, frame_bgr = usb_camera.read()
-                if not ret:
-                    print("Failed to capture frame")
-                    break
-            else:
-                frame = camera.capture_array()
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            frame = camera.capture_array()
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             
             # Try to detect face
             rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -224,10 +172,7 @@ def capture_face_from_camera(name, camera_type='auto'):
                 break
     
     finally:
-        if camera:
-            camera.stop()
-        if usb_camera:
-            usb_camera.release()
+        camera.stop()
         cv2.destroyAllWindows()
 
 
@@ -243,8 +188,6 @@ def main():
     # Capture from camera
     capture_parser = subparsers.add_parser('capture', help='Capture face from camera')
     capture_parser.add_argument('name', help='Name for the person')
-    capture_parser.add_argument('--camera-type', choices=['auto', 'pi_camera', 'usb_webcam'], 
-                                default='auto', help='Camera type to use (default: auto)')
     
     # List faces
     subparsers.add_parser('list', help='List all authorized faces')
@@ -258,7 +201,7 @@ def main():
     if args.command == 'add':
         add_face(args.image, args.name)
     elif args.command == 'capture':
-        capture_face_from_camera(args.name, args.camera_type)
+        capture_face_from_camera(args.name)
     elif args.command == 'list':
         list_faces()
     elif args.command == 'remove':
